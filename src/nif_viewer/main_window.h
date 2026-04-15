@@ -30,6 +30,7 @@ private:
     QLabel* status_label_ = nullptr;
     QTreeWidget* tree_ = nullptr;
     lu::assets::NifFile currentNif_;
+    QString currentFilePath_;
     bool hasNif_ = false;
     bool buildingTree_ = false;
 };

@@ -102,6 +102,7 @@ bool MainWindow::openFile(const QString& path)
     try {
         currentNif_ = lu::assets::nif_parse(
             std::span<const uint8_t>(data.data(), data.size()));
+        currentFilePath_ = path;
         hasNif_ = true;
     } catch (...) {
         hasNif_ = false;
@@ -187,11 +188,11 @@ void MainWindow::onSaveHkx()
         return;
     }
 
-    QSettings settings;
-    QString lastDir = settings.value("last_open_dir").toString();
+    QFileInfo fi(currentFilePath_);
+    QString defaultName = fi.absolutePath() + "/" + fi.completeBaseName() + ".hkx";
 
     QString path = qt_common::FileBrowserDialog::getSaveFileName(this,
-        "Save HKX File", lastDir,
+        "Save HKX File", defaultName,
         "Havok Files (*.hkx);;All Files (*)");
 
     if (path.isEmpty()) return;
