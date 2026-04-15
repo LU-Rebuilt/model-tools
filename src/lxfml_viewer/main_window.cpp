@@ -4,6 +4,11 @@
 #include "lego/brick_assembly/brick_assembly.h"
 #include "lego/brick_geometry/brick_geometry.h"
 #include "lego/brick_assembly/brick_colors.h"
+#include "havok/writer/hkx_writer.h"
+#include "havok/types/hkx_types.h"
+
+#include <cmath>
+#include <limits>
 
 #include <QMenuBar>
 #include <QDockWidget>
@@ -36,6 +41,14 @@ MainWindow::MainWindow(QWidget* parent)
 
     file_menu->addSeparator();
 
+    file_menu->addAction("&Generate HKX", QKeySequence("Ctrl+G"),
+                         this, &MainWindow::onGenerateHkx);
+
+    file_menu->addAction("&Save HKX...", QKeySequence("Ctrl+Shift+S"),
+                         this, &MainWindow::onSaveHkx);
+
+    file_menu->addSeparator();
+
     file_menu->addAction("Set &Client Root...", QKeySequence("Ctrl+R"),
                          this, [this]() {
         QSettings settings;
@@ -62,6 +75,20 @@ MainWindow::MainWindow(QWidget* parent)
 
     // View menu
     auto* view_menu = menuBar()->addMenu("&View");
+
+    auto* showBricksAct = view_menu->addAction("Show &Bricks");
+    showBricksAct->setCheckable(true);
+    showBricksAct->setChecked(true);
+    connect(showBricksAct, &QAction::toggled, [this](bool c) {
+        gl_widget_->showBricks = c; gl_widget_->update(); });
+
+    auto* showHkxAct = view_menu->addAction("Show &HKX Collision");
+    showHkxAct->setCheckable(true);
+    showHkxAct->setChecked(true);
+    connect(showHkxAct, &QAction::toggled, [this](bool c) {
+        gl_widget_->showHkx = c; gl_widget_->update(); });
+
+    view_menu->addSeparator();
 
     auto* showWireAct = view_menu->addAction("Show &Wireframe");
     showWireAct->setCheckable(true);
@@ -193,6 +220,7 @@ bool MainWindow::openFile(const QString& path) {
 
     currentAssembly_ = lu::assets::assemble_lxfml(currentLxfml_, loader);
     hasModel_ = true;
+    currentFilePath_ = path;
 
     gl_widget_->loadAssembly(currentAssembly_);
 
@@ -363,6 +391,139 @@ void MainWindow::onTreeItemSelected() {
         gl_widget_->setSelectedIndex(-1);
     }
     statusBar()->showMessage(item->text(0) + "  " + item->text(1), 5000);
+}
+
+void MainWindow::onGenerateHkx() {
+    if (!hasModel_ || currentAssembly_.bricks.empty()) {
+        QMessageBox::warning(this, "Generate HKX", "Load an LXFML file first.");
+        return;
+    }
+
+    // Build a box collider for each brick from its vertex AABB
+    std::vector<Hkx::ShapeInfo> boxShapes;
+
+    for (const auto& brick : currentAssembly_.bricks) {
+        if (brick.vertices.size() < 3) continue;
+
+        // Compute AABB
+        float minX = std::numeric_limits<float>::max();
+        float minY = std::numeric_limits<float>::max();
+        float minZ = std::numeric_limits<float>::max();
+        float maxX = std::numeric_limits<float>::lowest();
+        float maxY = std::numeric_limits<float>::lowest();
+        float maxZ = std::numeric_limits<float>::lowest();
+
+        for (size_t i = 0; i + 2 < brick.vertices.size(); i += 3) {
+            float x = brick.vertices[i];
+            float y = brick.vertices[i + 1];
+            float z = brick.vertices[i + 2];
+            minX = std::min(minX, x); maxX = std::max(maxX, x);
+            minY = std::min(minY, y); maxY = std::max(maxY, y);
+            minZ = std::min(minZ, z); maxZ = std::max(maxZ, z);
+        }
+
+        float halfX = (maxX - minX) * 0.5f;
+        float halfY = (maxY - minY) * 0.5f;
+        float halfZ = (maxZ - minZ) * 0.5f;
+        float cenX = (minX + maxX) * 0.5f;
+        float cenY = (minY + maxY) * 0.5f;
+        float cenZ = (minZ + maxZ) * 0.5f;
+
+        // Skip degenerate boxes
+        if (halfX < 1e-6f && halfY < 1e-6f && halfZ < 1e-6f) continue;
+
+        // Create box shape
+        Hkx::ShapeInfo box;
+        box.type = Hkx::ShapeType::Box;
+        box.className = "hkpBoxShape";
+        box.halfExtents = {halfX, halfY, halfZ, 0.0f};
+        box.radius = 0.05f;
+
+        // Wrap in ConvexTranslateShape to position at AABB center
+        Hkx::ShapeInfo translated;
+        translated.type = Hkx::ShapeType::ConvexTranslate;
+        translated.className = "hkpConvexTranslateShape";
+        translated.translation = {cenX, cenY, cenZ, 0.0f};
+        translated.radius = box.radius;
+        translated.children.push_back(std::move(box));
+
+        boxShapes.push_back(std::move(translated));
+    }
+
+    if (boxShapes.empty()) {
+        QMessageBox::warning(this, "Generate HKX", "No brick geometry to convert.");
+        return;
+    }
+
+    // Build the final shape — ListShape if multiple, single shape if one
+    Hkx::ShapeInfo rootShape;
+    if (boxShapes.size() == 1) {
+        rootShape = std::move(boxShapes[0]);
+    } else {
+        rootShape.type = Hkx::ShapeType::List;
+        rootShape.className = "hkpListShape";
+        rootShape.children = std::move(boxShapes);
+    }
+
+    // Build rigid body (static)
+    Hkx::RigidBodyInfo rb;
+    rb.shape = std::move(rootShape);
+    rb.material.friction = 0.5f;
+    rb.material.restitution = 0.4f;
+    rb.material.responseType = 0;
+    rb.mass = 0.0f;
+
+    // Build physics hierarchy
+    Hkx::PhysicsSystemInfo sys;
+    sys.rigidBodies.push_back(std::move(rb));
+
+    Hkx::PhysicsDataInfo pd;
+    pd.systems.push_back(std::move(sys));
+
+    currentHkx_ = Hkx::ParseResult{};
+    currentHkx_.success = true;
+    currentHkx_.havokVersion = "Havok-7.1.0-r1";
+    currentHkx_.fileVersion = 7;
+    currentHkx_.pointerSize = 4;
+    currentHkx_.physicsData.push_back(std::move(pd));
+
+    Hkx::RootLevelContainerInfo rlc;
+    rlc.namedVariants.push_back({"Physics Data", "hkpPhysicsData", 0});
+    currentHkx_.rootContainers.push_back(std::move(rlc));
+    hasHkx_ = true;
+
+    // Display in viewport as overlay
+    gl_widget_->loadHkxOverlay(currentHkx_);
+
+    int boxCount = static_cast<int>(currentAssembly_.bricks.size() - currentAssembly_.bricks_missing);
+    statusBar()->showMessage(
+        QString("HKX generated: %1 box colliders — toggle View > Show HKX/Bricks to compare")
+            .arg(boxCount), 10000);
+}
+
+void MainWindow::onSaveHkx() {
+    if (!hasHkx_) {
+        QMessageBox::warning(this, "Save HKX", "Generate HKX first (Ctrl+G).");
+        return;
+    }
+
+    QFileInfo fi(currentFilePath_);
+    QString defaultName = fi.absolutePath() + "/" + fi.completeBaseName() + ".hkx";
+
+    QString path = QFileDialog::getSaveFileName(this,
+        "Save HKX File", defaultName, "HKX Files (*.hkx);;All Files (*)");
+    if (path.isEmpty()) return;
+    if (!path.endsWith(".hkx", Qt::CaseInsensitive))
+        path += ".hkx";
+
+    Hkx::HkxWriter writer;
+    if (writer.Write(path.toStdString(), currentHkx_)) {
+        statusBar()->showMessage(QString("Saved: %1").arg(path), 5000);
+    } else {
+        QMessageBox::warning(this, "Save HKX",
+            QString("Failed to write HKX:\n%1")
+                .arg(QString::fromStdString(writer.GetError())));
+    }
 }
 
 } // namespace lxfml_viewer

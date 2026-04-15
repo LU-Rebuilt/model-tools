@@ -3,6 +3,7 @@
 #include "lxfml_gl_widget.h"
 #include "brick_db.h"
 #include "lego/lxfml/lxfml_reader.h"
+#include "havok/types/hkx_types.h"
 
 #include <QMainWindow>
 #include <QLabel>
@@ -19,6 +20,8 @@ public:
 
 private slots:
     void onFileOpen();
+    void onGenerateHkx();
+    void onSaveHkx();
     void onModelLoaded(uint32_t bricks, uint32_t vertices, uint32_t triangles);
     void onTreeItemSelected();
 
@@ -48,6 +51,11 @@ private:
     BrickDB brickDB_;
 
     bool buildingTree_ = false;
+    QString currentFilePath_;
+
+    // Generated HKX collision data
+    Hkx::ParseResult currentHkx_;
+    bool hasHkx_ = false;
 };
 
 } // namespace lxfml_viewer

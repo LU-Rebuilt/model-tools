@@ -9,6 +9,7 @@
 #include <QOpenGLFunctions>
 #include <cmath>
 #include <algorithm>
+#include <iostream>
 #include <cstring>
 #include <set>
 
@@ -129,6 +130,9 @@ void HkxGLWidget::loadParseResult(const Hkx::ParseResult& result) {
     for (const auto& scene : result.scenes) buildSceneMeshes(scene, sceneRootTransform);
 
     for (auto& m : meshes_) { stats_.totalVertices += static_cast<int>(m.vertices.size()/3); stats_.totalTriangles += static_cast<int>(m.indices.size()/3); }
+    std::cerr << "[HKX] loadParseResult: " << meshes_.size() << " meshes, "
+              << stats_.totalVertices << " verts, " << stats_.totalTriangles << " tris, "
+              << stats_.rigidBodyCount << " bodies, " << stats_.shapeCount << " shapes" << std::endl;
     fitToVisible();
     emit statsChanged();
 }

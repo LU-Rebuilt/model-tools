@@ -1,5 +1,6 @@
 #include "lxfml_gl_widget.h"
 #include "gl_helpers.h"
+#include "havok/converters/hkx_geometry.h"
 
 #include <QOpenGLFunctions>
 
@@ -25,6 +26,7 @@ void LxfmlGLWidget::onInitGL() {
 
 void LxfmlGLWidget::loadAssembly(const lu::assets::AssemblyResult& assembly) {
     clearMeshes();
+    brickMeshCount_ = 0;
     total_vertices_ = total_triangles_ = 0;
 
     for (const auto& ab : assembly.bricks) {
@@ -51,11 +53,37 @@ void LxfmlGLWidget::loadAssembly(const lu::assets::AssemblyResult& assembly) {
         addMesh(std::move(rm));
     }
 
+    brickMeshCount_ = meshCount();
     total_vertices_ = assembly.total_vertices;
     total_triangles_ = assembly.total_triangles;
 
     fitToVisible();
     emit modelLoaded(assembly.bricks_loaded, total_vertices_, total_triangles_);
+}
+
+void LxfmlGLWidget::loadHkxOverlay(const Hkx::ParseResult& hkxResult) {
+    clearHkxOverlay();
+
+    auto geo = Hkx::extractGeometry(hkxResult);
+
+    for (auto& em : geo.meshes) {
+        if (em.vertices.empty() || em.indices.empty()) continue;
+        RenderMesh rm;
+        rm.color[0] = 1.0f; rm.color[1] = 0.4f; rm.color[2] = 0.2f; rm.color[3] = 0.4f;
+        rm.wireColor[0] = 1.0f; rm.wireColor[1] = 0.5f; rm.wireColor[2] = 0.2f;
+        rm.label = "HKX: " + em.label;
+        rm.vertices = std::move(em.vertices);
+        rm.indices = std::move(em.indices);
+        addMesh(std::move(rm));
+    }
+
+    update();
+}
+
+void LxfmlGLWidget::clearHkxOverlay() {
+    while (meshCount() > brickMeshCount_)
+        removeMesh(meshCount() - 1);
+    update();
 }
 
 void LxfmlGLWidget::paintGL() {
@@ -82,35 +110,56 @@ void LxfmlGLWidget::paintGL() {
         const auto& mesh = meshes_[mi];
         if (mesh.vertices.empty() || mesh.indices.empty() || !mesh.visible) continue;
 
+        bool isBrick = (mi < brickMeshCount_);
+        if (isBrick && !showBricks) continue;
+        if (!isBrick && !showHkx) continue;
+
         bool selected = (mi == selectedIdx_);
 
         glEnableClientState(GL_VERTEX_ARRAY);
         glVertexPointer(3, GL_FLOAT, 0, mesh.vertices.data());
 
-        if (!mesh.normals.empty()) {
-            glEnableClientState(GL_NORMAL_ARRAY);
-            glNormalPointer(GL_FLOAT, 0, mesh.normals.data());
-        }
+        if (isBrick) {
+            // Brick: lit rendering with normals
+            glEnable(GL_LIGHTING);
+            if (!mesh.normals.empty()) {
+                glEnableClientState(GL_NORMAL_ARRAY);
+                glNormalPointer(GL_FLOAT, 0, mesh.normals.data());
+            }
 
-        // Transparent bricks
-        bool transparent = mesh.color[3] < 0.99f;
-        if (transparent) {
+            bool transparent = mesh.color[3] < 0.99f;
+            if (transparent) {
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                glColor4f(selected ? 1.0f : mesh.color[0],
+                          selected ? 0.5f : mesh.color[1],
+                          selected ? 0.2f : mesh.color[2],
+                          mesh.color[3]);
+            } else {
+                if (selected) glColor3f(1.0f, 0.5f, 0.2f);
+                else glColor3f(mesh.color[0], mesh.color[1], mesh.color[2]);
+            }
+
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.indices.size()),
+                           GL_UNSIGNED_INT, mesh.indices.data());
+
+            if (transparent) glDisable(GL_BLEND);
+        } else {
+            // HKX overlay: unlit, semi-transparent
+            glDisable(GL_LIGHTING);
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            glColor4f(selected ? 1.0f : mesh.color[0],
-                      selected ? 0.5f : mesh.color[1],
-                      selected ? 0.2f : mesh.color[2],
-                      mesh.color[3]);
-        } else {
-            if (selected) glColor3f(1.0f, 0.5f, 0.2f);
-            else glColor3f(mesh.color[0], mesh.color[1], mesh.color[2]);
+            if (selected) glColor4f(1.0f, 0.8f, 0.1f, 0.6f);
+            else glColor4f(mesh.color[0], mesh.color[1], mesh.color[2], mesh.color[3]);
+
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.indices.size()),
+                           GL_UNSIGNED_INT, mesh.indices.data());
+
+            glDisable(GL_BLEND);
         }
 
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.indices.size()),
-                       GL_UNSIGNED_INT, mesh.indices.data());
-
-        if (transparent) glDisable(GL_BLEND);
         glDisableClientState(GL_NORMAL_ARRAY);
         glDisableClientState(GL_VERTEX_ARRAY);
     }
@@ -125,6 +174,10 @@ void LxfmlGLWidget::paintGL() {
         for (int mi = 0; mi < static_cast<int>(meshes_.size()); ++mi) {
             const auto& mesh = meshes_[mi];
             if (mesh.vertices.empty() || mesh.indices.empty() || !mesh.visible) continue;
+
+            bool isBrick = (mi < brickMeshCount_);
+            if (isBrick && !showBricks) continue;
+            if (!isBrick && !showHkx) continue;
 
             bool selected = (mi == selectedIdx_);
             glEnableClientState(GL_VERTEX_ARRAY);
