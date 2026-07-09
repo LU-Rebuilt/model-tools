@@ -2,7 +2,7 @@
 
 #include "zip_extract.h"
 #include "lego/brick_assembly/brick_assembly.h"
-#include "lego/brick_geometry/brick_geometry.h"
+#include "lego/brick_geometry/brick_geometry_reader.h"
 #include "lego/brick_assembly/brick_colors.h"
 #include "havok/writer/hkx_writer.h"
 #include "havok/types/hkx_types.h"
