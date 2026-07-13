@@ -74,4 +74,7 @@ if(MODEL_TOOLS_BUILD_USD)
 
     add_executable(usd2nif src/usd2nif/main.cpp)
     target_link_libraries(usd2nif PRIVATE lu_assets_usd)
+
+    add_executable(kf2usd src/kf2usd/main.cpp)
+    target_link_libraries(kf2usd PRIVATE lu_assets_usd)
 endif()

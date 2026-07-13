@@ -123,8 +123,22 @@ block layout — but produces a valid, loadable model. Round-trip verified on th
 client corpus (geometry, material colors and texture paths survive
 NIF → USD → NIF). Skeletons/animation/collision import lands in later phases.
 
-**Building:** `nif2usd` and `usd2nif` require OpenUSD (see Requirements) and are
-built by default; pass `-DMODEL_TOOLS_BUILD_USD=OFF` to skip them (and the
+### kf2usd
+
+Export a KF animation to a UsdSkel animation stage.
+
+```
+kf2usd <input.kf> [output.usda|.usdc] [--fps N] [--clip N]
+```
+
+Each `NiControllerSequence` clip in the KF becomes a `UsdSkelAnimation` (per-joint
+translate/rotate/scale time samples) under one skeleton, so a model's whole
+animation set exports to a single stage. `--fps` sets time codes per second
+(default 30); `--clip N` exports only clip index N. Opens as skeletal animation
+in Blender/Houdini/Maya or plays in `usdview`.
+
+**Building:** `nif2usd`, `usd2nif` and `kf2usd` require OpenUSD (see Requirements)
+and are built by default; pass `-DMODEL_TOOLS_BUILD_USD=OFF` to skip them (and the
 OpenUSD dependency) if you only want the Qt viewers.
 
 ## Requirements
