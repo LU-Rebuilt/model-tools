@@ -11,6 +11,15 @@ find_package(Qt6 COMPONENTS Widgets OpenGLWidgets REQUIRED)
 find_package(OpenGL REQUIRED)
 
 include(FetchContent)
+
+# nif2usd (USD export CLI) needs lu-assets' optional USD translation layer,
+# which pulls in OpenUSD. Opt into it unless the user turns it off, so the
+# other viewers still build on machines without OpenUSD.
+option(MODEL_TOOLS_BUILD_USD "Build the nif2usd USD export CLI (requires OpenUSD)" ON)
+if(MODEL_TOOLS_BUILD_USD)
+    set(LU_ASSETS_BUILD_USD ON CACHE BOOL "" FORCE)
+endif()
+
 FetchContent_Declare(lu_assets
     GIT_REPOSITORY https://github.com/LU-Rebuilt/lu-assets.git
     GIT_TAG main
@@ -57,3 +66,9 @@ add_executable(lxfml_viewer
 )
 target_link_libraries(lxfml_viewer PRIVATE gl_viewport lu_assets qt_common ZLIB::ZLIB)
 target_include_directories(lxfml_viewer PRIVATE src/lxfml_viewer)
+
+# NIF -> USD export CLI (no Qt; console tool).
+if(MODEL_TOOLS_BUILD_USD)
+    add_executable(nif2usd src/nif2usd/main.cpp)
+    target_link_libraries(nif2usd PRIVATE lu_assets_usd)
+endif()

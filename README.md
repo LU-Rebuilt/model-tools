@@ -74,11 +74,49 @@ lxfml_viewer [file.lxfml or file.lxf]
 
 **Setup:** Set the client root to the game's `res/` directory so the viewer can find brick geometry files in `brickprimitives/lod0/`.
 
+### nif2usd
+
+Console tool (no Qt) that exports a NIF model to a [Universal Scene
+Description](https://openusd.org) stage, so LU meshes can be opened in
+Blender, Houdini, Maya or `usdview`.
+
+```
+nif2usd <input.nif> [output.usd|.usda|.usdc] [--y-up]
+```
+
+**Exports:**
+- One `UsdGeomMesh` per render mesh, in world space, triangulated, with
+  per-vertex normals, the first UV set (`st`), and authored vertex colors
+  (`displayColor`/`displayOpacity`) when present
+- A `UsdPreviewSurface` material per mesh, driven by the NIF's
+  `NiMaterialProperty` colors, with the diffuse texture wired through a
+  `UsdUVTexture` (texture paths preserved verbatim as asset references)
+- Stage metadata: Z-up (NIF/Gamebryo convention; `--y-up` bakes a -90° X
+  rotation to USD's Y-up instead), meters, and source provenance
+- LU-specific data USD has no native slot for (LOD bands, skin bone
+  bindings) as `lu:*` custom attributes, so a future USD→NIF importer can
+  round-trip them
+
+**Output format:** `.usda` (text, default) or `.usdc` (binary crate),
+inferred from the output extension. Output defaults to `<input>.usda`.
+
+This is Phase 1 of the USD bridge (export). USD→NIF import and KF/ETK/HKX
+animation & collision export land in later phases. See
+[`lu-assets/src/usd/`](https://github.com/LU-Rebuilt/lu-assets/tree/main/src/usd)
+for the translation library.
+
+**Building:** requires OpenUSD (see Requirements). `nif2usd` is built by
+default; pass `-DMODEL_TOOLS_BUILD_USD=OFF` to skip it (and the OpenUSD
+dependency) if you only want the Qt viewers.
+
 ## Requirements
 
 - Qt6 (Widgets, OpenGLWidgets)
 - OpenGL
 - zlib (for LXFML ZIP extraction)
+- OpenUSD 24.x+ — for `nif2usd` only. A system install is used when
+  present; otherwise it is built from source (slow). Skippable via
+  `-DMODEL_TOOLS_BUILD_USD=OFF`.
 
 ## Building
 
