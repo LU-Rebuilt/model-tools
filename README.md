@@ -137,9 +137,23 @@ animation set exports to a single stage. `--fps` sets time codes per second
 (default 30); `--clip N` exports only clip index N. Opens as skeletal animation
 in Blender/Houdini/Maya or plays in `usdview`.
 
-**Building:** `nif2usd`, `usd2nif` and `kf2usd` require OpenUSD (see Requirements)
-and are built by default; pass `-DMODEL_TOOLS_BUILD_USD=OFF` to skip them (and the
-OpenUSD dependency) if you only want the Qt viewers.
+### hkx2usd
+
+Export an HKX collision file to USD.
+
+```
+hkx2usd <input.hkx> [output.usda|.usdc]
+```
+
+Collision shapes become `UsdGeomMesh` prims (`purpose = "guide"`) under a
+`/collision` scope, so a model's physics can be inspected alongside its mesh in
+Blender/Houdini/Maya or usdview. Convex-hull, box and mesh shapes are all
+tessellated; the original Havok shape class is kept as a `lu:hkxShapeType`
+attribute.
+
+**Building:** `nif2usd`, `usd2nif`, `kf2usd` and `hkx2usd` require OpenUSD (see
+Requirements) and are built by default; pass `-DMODEL_TOOLS_BUILD_USD=OFF` to
+skip them (and the OpenUSD dependency) if you only want the Qt viewers.
 
 ## Requirements
 
