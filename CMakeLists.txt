@@ -67,8 +67,11 @@ add_executable(lxfml_viewer
 target_link_libraries(lxfml_viewer PRIVATE gl_viewport lu_assets qt_common ZLIB::ZLIB)
 target_include_directories(lxfml_viewer PRIVATE src/lxfml_viewer)
 
-# NIF -> USD export CLI (no Qt; console tool).
+# NIF <-> USD conversion CLIs (no Qt; console tools).
 if(MODEL_TOOLS_BUILD_USD)
     add_executable(nif2usd src/nif2usd/main.cpp)
     target_link_libraries(nif2usd PRIVATE lu_assets_usd)
+
+    add_executable(usd2nif src/usd2nif/main.cpp)
+    target_link_libraries(usd2nif PRIVATE lu_assets_usd)
 endif()

@@ -100,14 +100,32 @@ nif2usd <input.nif> [output.usd|.usda|.usdc] [--y-up]
 **Output format:** `.usda` (text, default) or `.usdc` (binary crate),
 inferred from the output extension. Output defaults to `<input>.usda`.
 
-This is Phase 1 of the USD bridge (export). USD→NIF import and KF/ETK/HKX
-animation & collision export land in later phases. See
+See
 [`lu-assets/src/usd/`](https://github.com/LU-Rebuilt/lu-assets/tree/main/src/usd)
 for the translation library.
 
-**Building:** requires OpenUSD (see Requirements). `nif2usd` is built by
-default; pass `-DMODEL_TOOLS_BUILD_USD=OFF` to skip it (and the OpenUSD
-dependency) if you only want the Qt viewers.
+### usd2nif
+
+The inverse of `nif2usd`: import a USD stage back into a NIF the client loads.
+
+```
+usd2nif <input.usd|.usda|.usdc> [output.nif] [--z-up]
+```
+
+**Imports:** every `UsdGeomMesh` becomes a `NiTriShape`/`NiTriShapeData`
+(positions, normals, `st` UVs, vertex colors); the bound `UsdPreviewSurface`
+becomes a `NiMaterialProperty`, and a connected texture becomes a
+`NiSourceTexture`. A flat root-node scene is emitted (per-mesh transforms baked
+into vertices). `--z-up` rotates a Y-up stage back to NIF's Z-up.
+
+Not byte-identical to any original NIF — USD doesn't carry Gamebryo's exact
+block layout — but produces a valid, loadable model. Round-trip verified on the
+client corpus (geometry, material colors and texture paths survive
+NIF → USD → NIF). Skeletons/animation/collision import lands in later phases.
+
+**Building:** `nif2usd` and `usd2nif` require OpenUSD (see Requirements) and are
+built by default; pass `-DMODEL_TOOLS_BUILD_USD=OFF` to skip them (and the
+OpenUSD dependency) if you only want the Qt viewers.
 
 ## Requirements
 
